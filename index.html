@@ -65,79 +65,124 @@ WhatsApp: 085941069821<br>
 Terima kasih sudah berbelanja! 🍒
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const products = [
-{name:"Canva Harian 1 Day",price:500,cat:"Canva",emoji:"🎨"},
-{name:"Canva Harian 2 Day",price:1000,cat:"Canva",emoji:"🎨"},
-{name:"Canva Harian 7 Day",price:5000,cat:"Canva",emoji:"🎨"},
-{name:"Canva Bulanan 1 Bulan",price:11000,cat:"Canva",emoji:"🎨"},
-{name:"Canva Bulanan 3 Bulan",price:23000,cat:"Canva",emoji:"🎨"},
-{name:"CapCut Sharing 7 Day",price:8000,cat:"CapCut",emoji:"🎬"},
-{name:"CapCut Sharing 1 Bulan",price:19000,cat:"CapCut",emoji:"🎬"},
-{name:"CapCut Private 7 Day",price:11000,cat:"CapCut",emoji:"🎬"},
-{name:"CapCut Private 1 Bulan",price:32000,cat:"CapCut",emoji:"🎬"},
-{name:"ChatGPT Go Sharing 3 Bulan",price:19000,cat:"ChatGPT",emoji:"🤖"},
-{name:"ChatGPT Go Private 3 Bulan",price:70000,cat:"ChatGPT",emoji:"🤖"},
-{name:"Disney+ Sharing 7 Day",price:11000,cat:"Disney+",emoji:"🎞️"},
-{name:"Disney+ 1 Bulan 7U",price:19000,cat:"Disney+",emoji:"🎞️"},
-{name:"Disney+ 1 Bulan 10U",price:17000,cat:"Disney+",emoji:"🎞️"},
-{name:"Gemini AI Pro 18 Bulan",price:40000,cat:"Lainnya",emoji:"✨"},
-{name:"Alight Motion 1 Tahun",price:10000,cat:"Lainnya",emoji:"🎞️"},
-{name:"Spotify Famplan",price:18000,cat:"Lainnya",emoji:"🎧"},
-{name:"Spotify Indplan",price:34000,cat:"Lainnya",emoji:"🎧"},
-{name:"Viu Private 1 Tahun",price:20000,cat:"Lainnya",emoji:"📺"},
-{name:"Wink Pro 7 Day",price:6000,cat:"Lainnya",emoji:"📸"},
-{name:"Wink Pro 14 Day",price:11000,cat:"Lainnya",emoji:"📸"},
-{name:"YouTube 1 Bulan",price:10000,cat:"Lainnya",emoji:"▶️"},
-{name:"Zoom 14 Day",price:10000,cat:"Lainnya",emoji:"💻"},
-{name:"Cek Turnitin per File",price:7000,cat:"Jasa",emoji:"📄"},
-{name:"Halaman + Daftar Isi",price:10000,cat:"Jasa",emoji:"📚"},
-{name:"Mendeley + Dapus 1 Sitasi",price:1000,cat:"Jasa",emoji:"📝"},
-{name:"Cek AI (Quillbot)",price:3000,cat:"Jasa",emoji:"🔎"},
-{name:"Jasa Ketik Word per Halaman",price:4000,cat:"Jasa",emoji:"⌨️"}
-];
+const SUPABASE_URL = "https://hbpiaklzfcvktdqvdcil.supabase.co";
+const SUPABASE_KEY = "sb_publishable_Dz4DtdMXHOyJiO4Ikh_zqA_XMy-z31P2";
 
-let cart=[];
-let active="Semua";
-const money=n=>"Rp "+n.toLocaleString("id-ID");
+const db = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
 
-function renderFilters(){
- const cats=["Semua",...new Set(products.map(p=>p.cat))];
- document.getElementById("filters").innerHTML=cats.map(c=>
- `<button class="${active===c?'active':''}" onclick="setCategory('${c}')">${c}</button>`
- ).join("");
+let products = [];
+let cart = [];
+let active = "Semua";
+
+const money = n => "Rp " + Number(n).toLocaleString("id-ID");
+
+async function loadProducts() {
+  const { data, error } = await db
+    .from("products")
+    .select("*")
+    .order("id", { ascending: true });
+
+  if (error) {
+    document.getElementById("products").innerHTML =
+      "<p>Produk belum dapat dimuat. Silakan coba lagi.</p>";
+    console.error(error);
+    return;
+  }
+
+  products = data || [];
+  renderFilters();
+  renderProducts();
+  renderCart();
 }
-function setCategory(c){active=c;renderFilters();renderProducts();}
-function renderProducts(){
- const list=active==="Semua"?products:products.filter(p=>p.cat===active);
- document.getElementById("products").innerHTML=list.map(p=>{
- const i=products.indexOf(p);
- return `<article class="product">
- <div class="emoji">${p.emoji}</div><h3>${p.name}</h3>
- <p>Kategori: ${p.cat}</p><div class="price">${money(p.price)}</div>
- <button class="buy" onclick="addCart(${i})">+ Tambah ke keranjang</button>
- </article>`;
- }).join("");
+
+function renderFilters() {
+  const cats = ["Semua", ...new Set(products.map(p => p.category))];
+
+  document.getElementById("filters").innerHTML = cats.map(c =>
+    `<button class="${active === c ? "active" : ""}"
+      onclick="setCategory('${c}')">${c}</button>`
+  ).join("");
 }
-function addCart(i){cart.push(products[i]);renderCart();}
-function removeCart(i){cart.splice(i,1);renderCart();}
-function renderCart(){
- const el=document.getElementById("cartItems");
- if(!cart.length){el.textContent="Keranjang masih kosong.";}
- else{el.innerHTML=cart.map((p,i)=>
- `<div class="cart-item"><span>${p.name} — ${money(p.price)}</span>
- <button onclick="removeCart(${i})">Hapus</button></div>`
- ).join("");}
- document.getElementById("total").textContent="Total: "+money(cart.reduce((s,p)=>s+p.price,0));
+
+function setCategory(c) {
+  active = c;
+  renderFilters();
+  renderProducts();
 }
-function checkout(){
- if(!cart.length){alert("Keranjang kamu masih kosong!");return;}
- const lines=cart.map((p,i)=>`${i+1}. ${p.name} - ${money(p.price)}`).join("\n");
- const total=cart.reduce((s,p)=>s+p.price,0);
- const msg=`Halo Kedai Amaaow! 🍒 Saya mau pesan:\n\n${lines}\n\nTotal: ${money(total)}\n\nMohon info cara pembayarannya. Terima kasih!`;
- window.open("https://wa.me/6285941069821?text="+encodeURIComponent(msg),"_blank");
+
+function renderProducts() {
+  const list = active === "Semua"
+    ? products
+    : products.filter(p => p.category === active);
+
+  document.getElementById("products").innerHTML = list.map(p => {
+    const i = products.indexOf(p);
+    return `<article class="product">
+      <div class="emoji">${p.emoji || "🍒"}</div>
+      <h3>${p.name}</h3>
+      <p>Kategori: ${p.category}</p>
+      <div class="price">${money(p.price)}</div>
+      <button class="buy" onclick="addCart(${i})">
+        + Tambah ke keranjang
+      </button>
+    </article>`;
+  }).join("");
 }
-renderFilters();renderProducts();renderCart();
+
+function addCart(i) {
+  cart.push(products[i]);
+  renderCart();
+}
+
+function removeCart(i) {
+  cart.splice(i, 1);
+  renderCart();
+}
+
+function renderCart() {
+  const el = document.getElementById("cartItems");
+
+  if (!cart.length) {
+    el.textContent = "Keranjang masih kosong.";
+  } else {
+    el.innerHTML = cart.map((p, i) =>
+      `<div class="cart-item">
+        <span>${p.name} — ${money(p.price)}</span>
+        <button onclick="removeCart(${i})">Hapus</button>
+      </div>`
+    ).join("");
+  }
+
+  document.getElementById("total").textContent =
+    "Total: " + money(cart.reduce((s, p) => s + Number(p.price), 0));
+}
+
+function checkout() {
+  if (!cart.length) {
+    alert("Keranjang kamu masih kosong!");
+    return;
+  }
+
+  const lines = cart.map((p, i) =>
+    `${i + 1}. ${p.name} - ${money(p.price)}`
+  ).join("\n");
+
+  const total = cart.reduce((s, p) => s + Number(p.price), 0);
+
+  const msg = `Halo Kedai Amaaow! 🍒 Saya mau pesan:\n\n${lines}\n\nTotal: ${money(total)}\n\nMohon info cara pembayarannya. Terima kasih!`;
+
+  window.open(
+    "https://wa.me/6285941069821?text=" + encodeURIComponent(msg),
+    "_blank"
+  );
+}
+
+loadProducts();
 </script>
 </body>
 </html>
