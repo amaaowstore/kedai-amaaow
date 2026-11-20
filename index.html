@@ -88,9 +88,8 @@ async function loadProducts() {
     .order("id", { ascending: true });
 
   if (error) {
-    document.getElementById("products").innerHTML =
-      "<p>Produk belum dapat dimuat. Silakan coba lagi.</p>";
-    console.error(error);
+    document.getElementById("products").textContent =
+  "Error Supabase: " + error.message;
     return;
   }
 
