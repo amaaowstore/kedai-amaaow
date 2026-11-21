@@ -1,1 +1,269 @@
 
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Kedai Amaaow</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#fffaf4;color:#51313b;font-family:Arial,sans-serif}
+header{background:#f8e5e9;padding:22px;text-align:center}
+h1{font-family:Georgia,serif;color:#963b58}
+main{max-width:1050px;margin:25px auto;padding:15px}
+.card{background:white;border-radius:16px;padding:20px;margin-bottom:18px;box-shadow:0 3px 15px #0000000b}
+input,button,select{padding:12px;border-radius:9px;border:1px solid #ddd;font-size:15px}
+input{width:100%;margin:8px 0}
+button{background:#788b70;color:white;border:0;cursor:pointer}
+button:hover{opacity:.85}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat{background:#f8e5e9;padding:17px;border-radius:13px}
+.stat strong{display:block;font-size:22px;margin-top:8px}
+table{width:100%;border-collapse:collapse;min-width:700px}
+th,td{padding:12px;border-bottom:1px solid #eee;text-align:left}
+.table-wrap{overflow-x:auto}
+small{color:#80636b}
+.hidden{display:none}
+#message{margin:12px 0;color:#a13c50}
+@media(max-width:600px){.stats{grid-template-columns:1fr 1fr}main{padding:10px}}
+</style>
+</head>
+<body>
+<header>
+<h1>🍒 Kedai Amaaow</h1>
+<strong>ADMIN DASHBOARD</strong>
+</header>
+
+<main>
+<section class="card" id="login">
+<h2>Login Admin</h2>
+<input id="email" type="email" placeholder="Email admin">
+<input id="password" type="password" placeholder="Password admin">
+<button id="loginBtn">Masuk Dashboard</button>
+<p id="message"></p>
+</section>
+
+<section id="dashboard" class="hidden">
+<div class="card">
+<h2>Dashboard Penjualan</h2>
+<button id="refreshBtn">↻ Refresh Data</button>
+<button id="logoutBtn">Keluar</button>
+</div>
+
+<div class="stats">
+<div class="stat">Total Pesanan<strong id="count">0</strong></div>
+<div class="stat">Total Penjualan<strong id="revenue">Rp 0</strong></div>
+<div class="stat">Pesanan Baru<strong id="pending">0</strong></div>
+</div>
+
+<div class="card">
+<h2>Daftar Pesanan</h2>
+<input id="search" placeholder="Cari nama atau kode pesanan...">
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Kode</th><th>Pembeli</th><th>Produk dibeli</th>
+<th>Total</th><th>Tanggal</th><th>Status</th>
+</tr>
+</thead>
+<tbody id="orders"></tbody>
+</table>
+</div>
+<p id="empty"></p>
+<p id="dashboardMessage"></p>
+</div>
+</section>
+</main>
+
+<script>
+const SUPABASE_URL = "https://hbpiaklzfcvktdqvdcil.supabase.co";
+const SUPABASE_KEY = "sb_publishable_Dz4DtdMXHOyJiO4Ikh_zqA_XMy-z31P";
+
+const db = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const money = n => "Rp " + Number(n || 0).toLocaleString("id-ID");
+
+const statuses = [
+"Menunggu Pembayaran",
+"Menunggu Konfirmasi",
+"Diproses",
+"Selesai",
+"Dibatalkan"
+];
+
+let allOrders = [];
+
+const el = id => document.getElementById(id);
+
+function showMessage(text){
+  el("message").textContent = text;
+}
+
+function addText(parent,tag,text){
+  const node = document.createElement(tag);
+  node.textContent = text ?? "-";
+  parent.appendChild(node);
+  return node;
+}
+
+async function login(){
+  showMessage("Memeriksa akun...");
+  const {data,error} = await db.auth.signInWithPassword({
+    email:el("email").value.trim(),
+    password:el("password").value
+  });
+
+  if(error){
+    showMessage("Login gagal: " + error.message);
+    return;
+  }
+
+  const {data:isAdmin,error:adminError} = await db.rpc("is_admin");
+
+  if(adminError || isAdmin !== true){
+    await db.auth.signOut();
+    showMessage("Akun ini tidak memiliki akses admin.");
+    return;
+  }
+
+  el("login").classList.add("hidden");
+  el("dashboard").classList.remove("hidden");
+  await loadOrders();
+}
+
+async function loadOrders(){
+  el("dashboardMessage").textContent = "Memuat pesanan...";
+
+  const {data,error} = await db
+    .from("orders")
+    .select("*")
+    .order("created_at",{ascending:false});
+
+  if(error){
+    el("dashboardMessage").textContent =
+      "Gagal memuat pesanan: " + error.message;
+    return;
+  }
+
+  allOrders = data || [];
+  el("count").textContent = allOrders.length;
+
+  const revenue = allOrders
+    .filter(o => o.status !== "Dibatalkan")
+    .reduce((sum,o) => sum + Number(o.total || 0),0);
+
+  el("revenue").textContent = money(revenue);
+
+  el("pending").textContent = allOrders.filter(o =>
+    ["Menunggu Pembayaran","Menunggu Konfirmasi"].includes(o.status)
+  ).length;
+
+  el("dashboardMessage").textContent = "";
+  renderOrders();
+}
+
+function productNames(items){
+  if(!items) return "-";
+  if(typeof items === "string"){
+    try{items = JSON.parse(items)}catch{return items}
+  }
+  if(!Array.isArray(items)) return JSON.stringify(items);
+  return items.map(item => {
+    const name = item.name || item.title || item.product_name || "Produk";
+    const qty = item.quantity || item.qty || 1;
+    return name + " x" + qty;
+  }).join(", ");
+}
+
+function renderOrders(){
+  const body = el("orders");
+  body.replaceChildren();
+
+  const q = el("search").value.toLowerCase();
+
+  const filtered = allOrders.filter(o =>
+    String(o.customer_name || "").toLowerCase().includes(q) ||
+    String(o.order_code || "").toLowerCase().includes(q)
+  );
+
+  el("empty").textContent = filtered.length ? "" : "Belum ada pesanan.";
+
+  filtered.forEach(order => {
+    const tr = document.createElement("tr");
+
+    addText(tr,"td",order.order_code);
+    addText(tr,"td",
+      (order.customer_name || "-") + " / " + (order.whatsapp || "-"));
+    addText(tr,"td",productNames(order.items));
+    addText(tr,"td",money(order.total));
+    addText(tr,"td",
+      order.created_at
+      ? new Date(order.created_at).toLocaleString("id-ID")
+      : "-");
+
+    const td = document.createElement("td");
+    const select = document.createElement("select");
+
+    statuses.forEach(status => {
+      const option = document.createElement("option");
+      option.value = status;
+      option.textContent = status;
+      select.appendChild(option);
+    });
+
+    select.value = order.status;
+    select.addEventListener("change",() =>
+      updateStatus(order.id,select.value,select)
+    );
+
+    td.appendChild(select);
+    tr.appendChild(td);
+    body.appendChild(tr);
+  });
+}
+
+async function updateStatus(id,status,select){
+  select.disabled = true;
+
+  const {error} = await db
+    .from("orders")
+    .update({status})
+    .eq("id",id);
+
+  if(error){
+    alert("Gagal mengubah status: " + error.message);
+    await loadOrders();
+    return;
+  }
+
+  await loadOrders();
+}
+
+async function logout(){
+  await db.auth.signOut();
+  allOrders = [];
+  el("dashboard").classList.add("hidden");
+  el("login").classList.remove("hidden");
+  el("password").value = "";
+  showMessage("Kamu sudah keluar.");
+}
+
+el("loginBtn").addEventListener("click",login);
+el("refreshBtn").addEventListener("click",loadOrders);
+el("logoutBtn").addEventListener("click",logout);
+el("search").addEventListener("input",renderOrders);
+
+db.auth.getSession().then(async ({data}) => {
+  if(data.session){
+    const {data:isAdmin,error} = await db.rpc("is_admin");
+    if(!error && isAdmin === true){
+      el("login").classList.add("hidden");
+      el("dashboard").classList.remove("hidden");
+      await loadOrders();
+    }
+  }
+});
+</script>
+</body>
+</html>
